@@ -11,7 +11,8 @@
 8. [Broadcasting and Copy Concepts](#broadcasting-and-copy-concepts)
 9. [Matrix Operations](#matrix-operations)
 10. [Advanced Array Manipulation](#advanced-array-manipulation)
-11. [Practical Exercises](#practical-exercises)
+11. [Essential Data Analytics & Data Cleaning Tools](#essential-data-analytics--data-cleaning-tools)
+12. [Practical Exercises](#practical-exercises)
 
 ---
 
@@ -324,8 +325,16 @@ print(a[0])  # 1 - original array unchanged
 
 # Slicing creates views (shares memory for arrays)
 slice_arr = a[0:5]
-slice_arr *= 10
-# Original array 'a' remains unchanged in NumPy arrays
+slice_arr[0] = 999
+print(a[0])  # 999 - Modifying the slice MUTATES original array 'a' because it is a VIEW!
+
+# To make an independent slice (copy), explicitly use .copy():
+safe_slice = a[0:5].copy()
+safe_slice[0] = 123
+print(a[0])  # 999 - 'a' remains unchanged!
+
+# Reassignment (e.g. slice_arr = slice_arr * 10) creates a new array and breaks the view connection.
+# But in-place operations (e.g. slice_arr *= 10) will modify the original array!
 ```
 
 ---
@@ -389,6 +398,104 @@ v_split = np.vsplit(arr, 2)  # Split into 2 parts vertically
 for i, split in enumerate(h_split):
     print(f"Split {i}:")
     print(split)
+```
+
+---
+
+## Essential Data Analytics & Data Cleaning Tools
+
+### 1. Conditional Logic & Feature Creation: `np.where()`
+`np.where(condition, [x, y])` is a vectorized ternary operator (`if condition then x else y`):
+- When given `(condition, x, y)`: returns elements chosen from `x` or `y` based on condition.
+- When given only `(condition)`: returns tuple of indices where condition is `True`.
+
+```python
+# Create new flag or categorical feature
+scores = np.array([45, 82, 91, 58, 73, 33, 95])
+status = np.where(scores >= 60, "Pass", "Fail")
+# Output: ['Fail' 'Pass' 'Pass' 'Fail' 'Pass' 'Fail' 'Pass']
+
+# Conditional adjustment without mutating original
+adjusted = np.where(scores < 50, scores + 5, scores)
+
+# Find indices of matching elements
+high_scorers_idx = np.where(scores >= 85)[0]  # indices [2, 6]
+```
+
+### 2. Missing Values (`NaN`) Handling
+Real-world datasets contain missing data represented as `np.nan` (floating-point NaN).
+- **Detection**: `np.isnan(arr)` returns a boolean mask.
+- **Filtering**: `arr[~np.isnan(arr)]` removes NaNs.
+- **Safe Aggregation**: Standard functions like `np.mean()` return `nan` when NaNs are present. Use `np.nanmean()`, `np.nansum()`, `np.nanstd()`, and `np.nanmedian()` instead.
+- **Imputation**: `np.nan_to_num(arr, nan=replacement_val)` replaces NaNs with a chosen value (e.g. 0 or mean).
+
+```python
+raw_data = np.array([85.0, 92.0, np.nan, 78.0, np.nan, 88.0])
+
+# Detection
+missing_count = np.sum(np.isnan(raw_data))  # 2
+
+# NaN-safe statistics
+safe_mean = np.nanmean(raw_data)  # 85.75
+safe_std = np.nanstd(raw_data)
+
+# Imputation (replacing NaNs with column average)
+imputed_data = np.nan_to_num(raw_data, nan=safe_mean)
+```
+
+### 3. Frequency Analysis & Value Counts: `np.unique()`
+Explore categorical distributions or find unique values:
+- `return_counts=True`: Returns frequencies of each unique item (NumPy's equivalent to Pandas `value_counts()`).
+- `axis=0`: Deduplicates table rows.
+
+```python
+ratings = np.array([5, 4, 3, 5, 2, 4, 5, 3, 4, 5])
+values, counts = np.unique(ratings, return_counts=True)
+for val, count in zip(values, counts):
+    print(f"Rating {val}: {count} occurrences")
+
+# Deduplicating 2D records
+transactions = np.array([[101, 500], [102, 300], [101, 500]])
+unique_records = np.unique(transactions, axis=0)
+```
+
+### 4. Sorting & Ranking Multi-dimensional Data: `np.argsort()`
+In tabular data, sorting a single column breaks row correspondence! `np.argsort()` returns the **indices** that would sort the array, enabling full-table sorting.
+
+```python
+# Table: [ID, Math, Science]
+students = np.array([
+    [1, 78, 92],
+    [2, 95, 81],
+    [3, 62, 70]
+])
+
+# Sort whole table by Math marks (column 1) - Ascending:
+math_idx = np.argsort(students[:, 1])
+sorted_by_math = students[math_idx]
+
+# Sort whole table by Science marks (column 2) - Descending:
+sci_desc_idx = np.argsort(students[:, 2])[::-1]
+sorted_by_sci = students[sci_desc_idx]
+
+# Top student index
+top_student = students[sci_desc_idx[0]]
+```
+
+### 5. Outlier Capping & Clamping: `np.clip()`
+Used in data cleaning for **Winsorization** (bounding extreme values without deleting rows):
+
+```python
+# Cap values strictly within [min, max]
+raw_scores = np.array([45, 88, -12, 105, 92, 115, 76, -5])
+capped_scores = np.clip(raw_scores, a_min=0, a_max=100)
+# [-12 becomes 0, 105 and 115 become 100]
+
+# Percentile-based capping (Winsorization)
+salaries = np.array([25000, 32000, 28000, 150000, 30000, 350000])
+p5 = np.percentile(salaries, 5)
+p95 = np.percentile(salaries, 95)
+cleaned_salaries = np.clip(salaries, p5, p95)
 ```
 
 ---
@@ -488,6 +595,28 @@ print(both_high)
 data[data[:, 2] < 75, 2] = 0
 print("Final data:")
 print(data)
+
+# 11. Create a performance flag with np.where
+performance = np.where(data[:, 1] >= 85, "High Performer", "Standard")
+print("Performance Flag:", performance)
+
+# 12. Handle missing exam scores (NaN) and impute with column average
+data_float = data.astype(float).copy()
+data_float[3, 2] = np.nan  # Simulated missing score
+clean_mean = np.nanmean(data_float[:, 2])
+data_float[:, 2] = np.nan_to_num(data_float[:, 2], nan=clean_mean)
+
+# 13. Frequency distribution of student ages with np.unique
+ages, counts = np.unique(data[:, 0], return_counts=True)
+print("Age counts:", dict(zip(ages, counts)))
+
+# 14. Rank students by Science marks using np.argsort
+rank_indices = np.argsort(data[:, 2])[::-1]
+print("Students ranked by Science (descending):\n", data[rank_indices])
+
+# 15. Cap marks to valid boundaries [0, 100] using np.clip
+sanitized_marks = np.clip(data[:, 1], a_min=0, a_max=100)
+print("Sanitized Math marks:", sanitized_marks)
 ```
 
 ---
